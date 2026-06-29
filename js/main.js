@@ -1,121 +1,211 @@
 /**
- * PixelMood — main.js
- * Handles: Copy prompt, mobile nav, category filters active state
+ * PixelMood - main.js
+ * Handles: Copy prompt, mobile nav, header scroll, card click, category filters
  */
 (function () {
   'use strict';
 
   /* ============================================================
-     COPY PROMPT
-     ============================================================ */
-  function showToast(msg) {
-    var toast = document.getElementById('pm-copy-toast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.id = 'pm-copy-toast';
-      document.body.appendChild(toast);
-    }
-    toast.textContent = msg || '\u2713 Prompt copied!';
-    toast.classList.add('is-visible');
-    clearTimeout(toast._t);
-    toast._t = setTimeout(function () {
-      toast.classList.remove('is-visible');
-    }, 2400);
+     COPY PROMPT BUTTON
+  ============================================================ */
+  function initCopyButtons() {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.pm-copy-btn');
+      if (!btn) return;
+
+      var promptText = btn.getAttribute('data-prompt');
+      if (!promptText) return;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(promptText).then(function () {
+          showCopyFeedback(btn);
+        }).catch(function () {
+          fallbackCopy(promptText, btn);
+        });
+      } else {
+        fallbackCopy(promptText, btn);
+      }
+    });
   }
-
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.pm-copy-btn');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    var text = btn.getAttribute('data-content') || '';
-    if (!text) {
-      /* Fallback: grab from .pm-prompt-content-box on single pages */
-      var box = document.querySelector('.pm-prompt-content-box p');
-      if (box) text = box.innerText || box.textContent;
-    }
-
-    if (!text) return;
-
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(function () {
-        showToast('\u2713 Prompt copied!');
-        btn.textContent = '\u2713 Copied!';
-        setTimeout(function () { btn.innerHTML = '&#x2398; Copy'; }, 2000);
-      }).catch(function () {
-        fallbackCopy(text, btn);
-      });
-    } else {
-      fallbackCopy(text, btn);
-    }
-  });
 
   function fallbackCopy(text, btn) {
     var ta = document.createElement('textarea');
     ta.value = text;
-    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
     try {
       document.execCommand('copy');
-      showToast('\u2713 Prompt copied!');
-      if (btn) {
-        btn.textContent = '\u2713 Copied!';
-        setTimeout(function () { btn.innerHTML = '&#x2398; Copy'; }, 2000);
-      }
+      showCopyFeedback(btn);
     } catch (err) {
-      showToast('\u2717 Copy failed. Please copy manually.');
+      console.warn('PixelMood: Copy failed', err);
     }
     document.body.removeChild(ta);
   }
 
+  function showCopyFeedback(btn) {
+    var original = btn.innerHTML;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    btn.classList.add('pm-copy-btn--success');
+    setTimeout(function () {
+      btn.innerHTML = original;
+      btn.classList.remove('pm-copy-btn--success');
+    }, 2000);
+  }
+
   /* ============================================================
-     MOBILE NAVIGATION TOGGLE
-     ============================================================ */
-  var toggle = document.querySelector('.pm-nav-toggle');
-  var mobileNav = document.querySelector('.pm-mobile-nav');
+     MOBILE NAVIGATION
+  ============================================================ */
+  function initMobileNav() {
+    var toggle  = document.getElementById('pm-nav-toggle');
+    var mobileNav = document.getElementById('pm-mobile-nav');
+    var overlay = document.getElementById('pm-mobile-overlay');
+    var body    = document.body;
 
-  if (toggle && mobileNav) {
+    if (!toggle || !mobileNav) return;
+
+    function openNav() {
+      mobileNav.classList.add('pm-mobile-nav--open');
+      mobileNav.setAttribute('aria-hidden', 'false');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.classList.add('pm-nav-toggle--active');
+      body.classList.add('pm-nav-open');
+      if (overlay) overlay.classList.add('pm-mobile-overlay--visible');
+    }
+
+    function closeNav() {
+      mobileNav.classList.remove('pm-mobile-nav--open');
+      mobileNav.setAttribute('aria-hidden', 'true');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.classList.remove('pm-nav-toggle--active');
+      body.classList.remove('pm-nav-open');
+      if (overlay) overlay.classList.remove('pm-mobile-overlay--visible');
+    }
+
     toggle.addEventListener('click', function () {
-      var isOpen = mobileNav.classList.toggle('is-open');
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    });
-
-    /* Close on outside click */
-    document.addEventListener('click', function (e) {
-      if (!toggle.contains(e.target) && !mobileNav.contains(e.target)) {
-        mobileNav.classList.remove('is-open');
-        toggle.setAttribute('aria-expanded', 'false');
+      if (mobileNav.classList.contains('pm-mobile-nav--open')) {
+        closeNav();
+      } else {
+        openNav();
       }
     });
-  }
 
-  /* ============================================================
-     CATEGORY FILTER ACTIVE STATE
-     ============================================================ */
-  var filterLinks = document.querySelectorAll('.pm-cat-filters a');
-  var currentUrl = window.location.href;
-
-  filterLinks.forEach(function (link) {
-    if (link.href === currentUrl || currentUrl.indexOf(link.href) === 0) {
-      link.classList.add('is-active');
+    if (overlay) {
+      overlay.addEventListener('click', closeNav);
     }
-  });
 
-  /* Mark "All" active on archive root */
-  if (filterLinks.length) {
-    var allLink = filterLinks[0];
-    var isRoot = /\/prompts\/?$/.test(window.location.pathname) && !window.location.search;
-    if (isRoot) allLink.classList.add('is-active');
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeNav();
+    });
   }
 
   /* ============================================================
-     SMOOTH CARD HOVER (accessibility: reduce-motion safe)
-     ============================================================ */
-  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    /* Cards already use CSS transition — nothing extra needed */
+     STICKY HEADER SCROLL EFFECT
+  ============================================================ */
+  function initStickyHeader() {
+    var header = document.getElementById('masthead');
+    if (!header) return;
+
+    var scrolled = false;
+    window.addEventListener('scroll', function () {
+      if (window.scrollY > 50) {
+        if (!scrolled) {
+          header.classList.add('pm-site-header--scrolled');
+          scrolled = true;
+        }
+      } else {
+        if (scrolled) {
+          header.classList.remove('pm-site-header--scrolled');
+          scrolled = false;
+        }
+      }
+    }, { passive: true });
   }
+
+  /* ============================================================
+     CLICKABLE PROMPT CARDS
+  ============================================================ */
+  function initCardClick() {
+    document.addEventListener('click', function (e) {
+      var card = e.target.closest('.pm-card');
+      if (!card) return;
+
+      // Don't intercept clicks on buttons or links inside the card
+      if (e.target.closest('a, button, .pm-copy-btn')) return;
+
+      var link = card.querySelector('.pm-card-title a');
+      if (link && link.href) {
+        window.location.href = link.href;
+      }
+    });
+
+    // Add pointer cursor to cards
+    document.querySelectorAll('.pm-card').forEach(function (card) {
+      card.style.cursor = 'pointer';
+    });
+  }
+
+  /* ============================================================
+     SCROLL REVEAL ANIMATION
+  ============================================================ */
+  function initScrollReveal() {
+    if (!('IntersectionObserver' in window)) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('pm-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.pm-card').forEach(function (el) {
+      observer.observe(el);
+    });
+  }
+
+  /* ============================================================
+     SEARCH INPUT CLEAR BUTTON
+  ============================================================ */
+  function initSearchClear() {
+    document.querySelectorAll('.pm-search-input').forEach(function (input) {
+      input.addEventListener('input', function () {
+        var wrap = input.closest('.pm-search-wrap');
+        if (!wrap) return;
+        var clearBtn = wrap.querySelector('.pm-search-clear');
+        if (input.value.length > 0) {
+          if (!clearBtn) {
+            clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'pm-search-clear';
+            clearBtn.setAttribute('aria-label', 'Clear search');
+            clearBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            clearBtn.addEventListener('click', function () {
+              input.value = '';
+              input.focus();
+              clearBtn.remove();
+            });
+            wrap.appendChild(clearBtn);
+          }
+        } else if (clearBtn) {
+          clearBtn.remove();
+        }
+      });
+    });
+  }
+
+  /* ============================================================
+     INIT ALL
+  ============================================================ */
+  document.addEventListener('DOMContentLoaded', function () {
+    initCopyButtons();
+    initMobileNav();
+    initStickyHeader();
+    initCardClick();
+    initScrollReveal();
+    initSearchClear();
+  });
 
 })();
